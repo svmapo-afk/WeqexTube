@@ -28,11 +28,12 @@ jobs:
         working-directory: source
         run: |
           sed -i 's/applicationId = "com.github.libretube"/applicationId = "app.weqextube"/' app/build.gradle.kts
+          sed -i '/applicationIdSuffix = ".debug"/d' app/build.gradle.kts
           sed -i 's/resValue("string", "app_name", "LibreTube")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
-          sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube Debug")/' app/build.gradle.kts
+          sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/rootProject.name = "LibreTube"/rootProject.name = "WeqexTube"/' settings.gradle.kts
-          sed -Ei 's/versionCode = [0-9]+/versionCode = 1/' app/build.gradle.kts
-          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.0"/' app/build.gradle.kts
+          sed -Ei 's/versionCode = [0-9]+/versionCode = 2/' app/build.gradle.kts
+          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.1"/' app/build.gradle.kts
           sed -i 's/>LibreTube</>WeqexTube</' app/src/main/res/values/strings.xml
           for spec in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
             set -- $spec
@@ -48,6 +49,6 @@ jobs:
       - name: Publish APK
         uses: actions/upload-artifact@v4
         with:
-          name: WeqexTube-debug-apk
+          name: WeqexTube-1.0.1-APK
           path: source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
