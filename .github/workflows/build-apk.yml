@@ -19,6 +19,11 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/libre-tube/LibreTube.git source
 
+      - name: Install icon renderer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin
+
       - name: Apply WeqexTube branding
         working-directory: source
         run: |
@@ -31,9 +36,9 @@ jobs:
           sed -i 's/>LibreTube</>WeqexTube</' app/src/main/res/values/strings.xml
           for spec in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
             set -- $spec
-            convert "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" -resize "$2x$2" "app/src/main/res/mipmap-$1/ic_launcher.png"
-            convert "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" -resize "$2x$2" "app/src/main/res/mipmap-$1/ic_launcher_round.png"
-            convert "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" -resize "$2x$2" "app/src/main/res/mipmap-$1/ic_launcher_foreground.png"
+            rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "app/src/main/res/mipmap-$1/ic_launcher.png"
+            rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "app/src/main/res/mipmap-$1/ic_launcher_round.png"
+            rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "app/src/main/res/mipmap-$1/ic_launcher_foreground.png"
           done
 
       - name: Build installable APK
