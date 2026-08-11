@@ -1,10 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="224" fill="#5A1D26"/>
-  <g fill="none" stroke="#FFF6F2" stroke-linecap="round" stroke-width="76">
-    <path d="M160 512h30"/>
-    <path d="M285 400v224"/>
-    <path d="M420 310v404"/>
+  <defs>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="28" dy="32" stdDeviation="28" flood-color="#AAB6C4" flood-opacity=".55"/>
+      <feDropShadow dx="-22" dy="-24" stdDeviation="28" flood-color="#FFFFFF" flood-opacity=".9"/>
+    </filter>
+    <filter id="symbolShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="10" dy="12" stdDeviation="9" flood-color="#AEBAC7" flood-opacity=".7"/>
+      <feDropShadow dx="-5" dy="-6" stdDeviation="7" flood-color="#FFFFFF" flood-opacity=".85"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="232" fill="#E9EEF3"/>
+  <rect x="92" y="92" width="840" height="840" rx="185" fill="#EDF1F5" filter="url(#softShadow)"/>
+  <g fill="#1D2C3E" filter="url(#symbolShadow)">
+    <rect x="234" y="454" width="72" height="116" rx="36"/>
+    <rect x="344" y="370" width="76" height="284" rx="38"/>
+    <rect x="464" y="278" width="82" height="468" rx="41"/>
+    <path d="M588 381c0-26 29-42 51-28l190 122c21 14 21 45 0 59L639 657c-22 14-51-2-51-28V381Z"/>
+    <rect x="744" y="370" width="76" height="284" rx="38"/>
   </g>
-  <path d="M560 287 850 512 560 737Z" fill="none" stroke="#FFF6F2" stroke-linejoin="round" stroke-width="72"/>
-  <path d="m662 440 112 72-112 72Z" fill="#FF6B5F"/>
 </svg>
