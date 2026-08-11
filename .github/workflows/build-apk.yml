@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out build configuration
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Fetch LibreTube source
         run: |
