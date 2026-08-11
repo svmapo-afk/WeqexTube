@@ -24,7 +24,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y librsvg2-bin
 
-      - name: Apply WeqexTube branding
+      - name: Apply WeqexTube 1.0.2 changes
         working-directory: source
         run: |
           sed -i 's/applicationId = "com.github.libretube"/applicationId = "app.weqextube"/' app/build.gradle.kts
@@ -32,15 +32,27 @@ jobs:
           sed -i 's/resValue("string", "app_name", "LibreTube")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/rootProject.name = "LibreTube"/rootProject.name = "WeqexTube"/' settings.gradle.kts
-          sed -Ei 's/versionCode = [0-9]+/versionCode = 2/' app/build.gradle.kts
-          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.1"/' app/build.gradle.kts
-          sed -i 's/>LibreTube</>WeqexTube</' app/src/main/res/values/strings.xml
+          sed -Ei 's/versionCode = [0-9]+/versionCode = 3/' app/build.gradle.kts
+          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.2"/' app/build.gradle.kts
+          find app/src/main/res -path '*/strings.xml' -exec sed -i 's/LibreTube/WeqexTube/g' {} +
+          sed -i 's|@drawable/splash_icon|@mipmap/ic_launcher_foreground|g' app/src/main/res/values/themes.xml app/src/main/res/values-night/themes.xml app/src/main/res/drawable/splash_anim.xml
+          sed -Ei 's/newpipeextractor = "[^"]+"/newpipeextractor = "738c3d4"/' gradle/libs.versions.toml
           for spec in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
             set -- $spec
             rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "app/src/main/res/mipmap-$1/ic_launcher.png"
             rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "app/src/main/res/mipmap-$1/ic_launcher_round.png"
             rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "app/src/main/res/mipmap-$1/ic_launcher_foreground.png"
           done
+
+      - name: Verify branding and playback engine
+        working-directory: source
+        run: |
+          grep -q 'applicationId = "app.weqextube"' app/build.gradle.kts
+          grep -q 'versionName = "1.0.2"' app/build.gradle.kts
+          grep -q 'newpipeextractor = "738c3d4"' gradle/libs.versions.toml
+          if grep -R "LibreTube" app/src/main/res/values*/strings.xml; then
+            exit 1
+          fi
 
       - name: Build installable APK
         working-directory: source
@@ -49,6 +61,6 @@ jobs:
       - name: Publish APK
         uses: actions/upload-artifact@v4
         with:
-          name: WeqexTube-1.0.1-APK
+          name: WeqexTube-1.0.2-APK
           path: source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
