@@ -15,16 +15,17 @@ jobs:
       - name: Check out build configuration
         uses: actions/checkout@v6
 
-      - name: Fetch LibreTube source
+      - name: Fetch latest LibreTube source
         run: |
           git clone --depth 1 https://github.com/libre-tube/LibreTube.git source
+          git -C source log -1 --format='LibreTube source: %H (%cs)'
 
       - name: Install icon renderer
         run: |
           sudo apt-get update
           sudo apt-get install -y librsvg2-bin
 
-      - name: Apply WeqexTube 1.0.2 changes
+      - name: Apply WeqexTube 1.0.3 changes
         working-directory: source
         run: |
           sed -i 's/applicationId = "com.github.libretube"/applicationId = "app.weqextube"/' app/build.gradle.kts
@@ -32,8 +33,8 @@ jobs:
           sed -i 's/resValue("string", "app_name", "LibreTube")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/rootProject.name = "LibreTube"/rootProject.name = "WeqexTube"/' settings.gradle.kts
-          sed -Ei 's/versionCode = [0-9]+/versionCode = 3/' app/build.gradle.kts
-          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.2"/' app/build.gradle.kts
+          sed -Ei 's/versionCode = [0-9]+/versionCode = 4/' app/build.gradle.kts
+          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.3"/' app/build.gradle.kts
           find app/src/main/res -path '*/strings.xml' -exec sed -i 's/LibreTube/WeqexTube/g' {} +
           sed -i 's|@drawable/splash_icon|@mipmap/ic_launcher_foreground|g' app/src/main/res/values/themes.xml app/src/main/res/values-night/themes.xml app/src/main/res/drawable/splash_anim.xml
           sed -Ei 's/newpipeextractor = "[^"]+"/newpipeextractor = "738c3d4"/' gradle/libs.versions.toml
@@ -44,11 +45,12 @@ jobs:
             rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "app/src/main/res/mipmap-$1/ic_launcher_foreground.png"
           done
 
-      - name: Verify branding and playback engine
+      - name: Verify version and branding
         working-directory: source
         run: |
           grep -q 'applicationId = "app.weqextube"' app/build.gradle.kts
-          grep -q 'versionName = "1.0.2"' app/build.gradle.kts
+          grep -q 'versionCode = 4' app/build.gradle.kts
+          grep -q 'versionName = "1.0.3"' app/build.gradle.kts
           grep -q 'newpipeextractor = "738c3d4"' gradle/libs.versions.toml
           if grep -R "LibreTube" app/src/main/res/values*/strings.xml; then
             exit 1
@@ -56,17 +58,13 @@ jobs:
 
       - name: Build installable APK
         working-directory: source
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon --refresh-dependencies :app:assembleDebug
 
       - name: Prepare direct APK
-        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.2.apk
+        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.3.apk
 
-      - name: Publish direct APK download
+      - name: Publish new direct APK download
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.0.2 >/dev/null 2>&1; then
-            gh release upload v1.0.2 WeqexTube-1.0.2.apk --clobber
-          else
-            gh release create v1.0.2 WeqexTube-1.0.2.apk --title "WeqexTube 1.0.2" --notes "Исправлено брендирование, обновлён видеодвижок и добавлена прямая загрузка APK."
-          fi
+          gh release create v1.0.3 WeqexTube-1.0.3.apk --title "WeqexTube 1.0.3" --notes "Новая отдельная сборка из актуального исходного кода LibreTube. Версия и ресурсы WeqexTube проверяются перед созданием APK."
