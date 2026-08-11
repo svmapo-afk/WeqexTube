@@ -1,0 +1,46 @@
+name: Build WeqexTube APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out build configuration
+        uses: actions/checkout@v4
+
+      - name: Fetch LibreTube source
+        run: |
+          git clone --depth 1 https://github.com/libre-tube/LibreTube.git source
+
+      - name: Apply WeqexTube branding
+        working-directory: source
+        run: |
+          sed -i 's/applicationId = "com.github.libretube"/applicationId = "app.weqextube"/' app/build.gradle.kts
+          sed -i 's/resValue("string", "app_name", "LibreTube")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
+          sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube Debug")/' app/build.gradle.kts
+          sed -i 's/rootProject.name = "LibreTube"/rootProject.name = "WeqexTube"/' settings.gradle.kts
+          sed -i 's/>LibreTube</>WeqexTube</' app/src/main/res/values/strings.xml
+          for spec in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
+            set -- $spec
+            convert "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" -resize "$2x$2" "app/src/main/res/mipmap-$1/ic_launcher.png"
+            convert "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" -resize "$2x$2" "app/src/main/res/mipmap-$1/ic_launcher_round.png"
+            convert "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" -resize "$2x$2" "app/src/main/res/mipmap-$1/ic_launcher_foreground.png"
+          done
+
+      - name: Build installable APK
+        working-directory: source
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Publish APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeqexTube-debug-apk
+          path: source/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
