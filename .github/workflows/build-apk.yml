@@ -318,29 +318,35 @@ jobs:
           player_service = Path("app/src/main/java/com/github/libretube/services/OnlinePlayerService.kt")
           text = player_service.read_text()
           stream_marker = "        val streams = streams ?: return\n"
-          progressive_lookup = """        val progressiveStream = streams.videoStreams.firstOrNull {
-            it.videoOnly == false && !it.url.isNullOrBlank()
-        }
-"""
+          progressive_lookup = "\n".join([
+              "        val progressiveStream = streams.videoStreams.firstOrNull {",
+              "            it.videoOnly == false && !it.url.isNullOrBlank()",
+              "        }",
+              "",
+          ])
           if progressive_lookup not in text:
               text = text.replace(stream_marker, stream_marker + progressive_lookup, 1)
 
-          dash_marker = """            // DASH
-            streams.videoStreams.isNotEmpty() -> {
-"""
-          progressive_branch = """            // Progressive Piped/Odysee fallback with audio and video in one file.
-            progressiveStream != null -> {
-                val mediaItem = createMediaItem(
-                    progressiveStream.url!!.toUri(),
-                    progressiveStream.mimeType ?: MimeTypes.VIDEO_MP4,
-                    streams
-                )
-                exoPlayer?.setMediaItem(mediaItem)
-                return
-            }
-            // DASH
-            streams.videoStreams.isNotEmpty() -> {
-"""
+          dash_marker = "\n".join([
+              "            // DASH",
+              "            streams.videoStreams.isNotEmpty() -> {",
+              "",
+          ])
+          progressive_branch = "\n".join([
+              "            // Progressive Piped/Odysee fallback with audio and video in one file.",
+              "            progressiveStream != null -> {",
+              "                val mediaItem = createMediaItem(",
+              "                    progressiveStream.url!!.toUri(),",
+              "                    progressiveStream.mimeType ?: MimeTypes.VIDEO_MP4,",
+              "                    streams",
+              "                )",
+              "                exoPlayer?.setMediaItem(mediaItem)",
+              "                return",
+              "            }",
+              "            // DASH",
+              "            streams.videoStreams.isNotEmpty() -> {",
+              "",
+          ])
           if dash_marker not in text:
               raise SystemExit("OnlinePlayerService DASH structure changed upstream")
           text = text.replace(dash_marker, progressive_branch, 1)
