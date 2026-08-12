@@ -23,9 +23,9 @@ jobs:
       - name: Install build inspection tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y librsvg2-bin apksigner
+          sudo apt-get install -y imagemagick apksigner
 
-      - name: Apply complete WeqexTube 1.0.5 branding
+      - name: Apply complete WeqexTube 1.0.6 branding
         working-directory: source
         run: |
           sed -i 's/applicationId = "com.github.libretube"/applicationId = "app.weqextube"/' app/build.gradle.kts
@@ -33,8 +33,8 @@ jobs:
           sed -i 's/resValue("string", "app_name", "LibreTube")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/rootProject.name = "LibreTube"/rootProject.name = "WeqexTube"/' settings.gradle.kts
-          sed -Ei 's/versionCode = [0-9]+/versionCode = 6/' app/build.gradle.kts
-          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.5"/' app/build.gradle.kts
+          sed -Ei 's/versionCode = [0-9]+/versionCode = 7/' app/build.gradle.kts
+          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.6"/' app/build.gradle.kts
 
           python3 - <<'PY'
           from pathlib import Path
@@ -104,9 +104,10 @@ jobs:
           for spec in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
             set -- $spec
             directory="app/src/main/res/mipmap-$1"
-            rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "$directory/ic_launcher.png"
+            convert "$GITHUB_WORKSPACE/assets/weqextube-icon.png" -filter Lanczos -resize "$2x$2" -strip "$directory/ic_launcher.png"
             cp "$directory/ic_launcher.png" "$directory/ic_launcher_round.png"
-            cp "$directory/ic_launcher.png" "$directory/ic_launcher_foreground.png"
+            foreground_size=$(( $2 * 9 / 4 ))
+            convert "$GITHUB_WORKSPACE/assets/weqextube-icon.png" -filter Lanczos -resize "${foreground_size}x${foreground_size}" -strip "$directory/ic_launcher_foreground.png"
           done
 
           printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#1D2C3E" android:pathData="M23,48 L31,48 L31,60 L23,60 Z M36,40 L44,40 L44,68 L36,68 Z M49,31 L57,31 L57,77 L49,77 Z M62,39 L86,54 L62,69 Z"/></vector>' > app/src/main/res/drawable/ic_launcher_monochrome.xml
@@ -115,8 +116,8 @@ jobs:
         working-directory: source
         run: |
           grep -q 'applicationId = "app.weqextube"' app/build.gradle.kts
-          grep -q 'versionCode = 6' app/build.gradle.kts
-          grep -q 'versionName = "1.0.5"' app/build.gradle.kts
+          grep -q 'versionCode = 7' app/build.gradle.kts
+          grep -q 'versionName = "1.0.6"' app/build.gradle.kts
           grep -q '<string name="app_name" translatable="false">WeqexTube</string>' app/src/main/res/values/strings.xml
           grep -q '<string name="about">О WeqexTube</string>' app/src/main/res/values-ru/strings.xml
           grep -q 'Добро пожаловать в WeqexTube' app/src/main/res/values-ru/strings.xml
@@ -141,7 +142,7 @@ jobs:
 
           aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           "$aapt" dump badging "$apk" | tee /tmp/badging.txt
-          grep -q "package: name='app.weqextube' versionCode='6' versionName='1.0.5'" /tmp/badging.txt
+          grep -q "package: name='app.weqextube' versionCode='7' versionName='1.0.6'" /tmp/badging.txt
           grep -q "application-label:'WeqexTube'" /tmp/badging.txt
 
           "$aapt" dump resources "$apk" > /tmp/resources.txt
@@ -159,10 +160,10 @@ jobs:
           sha256sum "$apk"
 
       - name: Prepare direct APK
-        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.5.apk
+        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.6.apk
 
       - name: Publish verified direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.0.5 WeqexTube-1.0.5.apk --title "WeqexTube 1.0.5" --notes "Полный пользовательский ребрендинг: название WeqexTube во всех переводах, экран О приложении, приветствие, музыкальный режим, резервные копии, ссылки и канал обновлений. Имя, версия, строки и иконка проверены внутри готового APK."
+          gh release create v1.0.6 WeqexTube-1.0.6.apk --title "WeqexTube 1.0.6" --notes "Использована именно предоставленная пользователем иконка без перерисовки. Полный пользовательский ребрендинг WeqexTube; название, версия, строки и точный хэш упакованной иконки проверены внутри APK."
