@@ -20,12 +20,12 @@ jobs:
           git clone --depth 1 https://github.com/libre-tube/LibreTube.git source
           git -C source log -1 --format='LibreTube source: %H (%cs)'
 
-      - name: Install icon renderer
+      - name: Install build inspection tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y librsvg2-bin
+          sudo apt-get install -y librsvg2-bin apksigner
 
-      - name: Apply WeqexTube 1.0.3 changes
+      - name: Apply verified WeqexTube 1.0.4 branding
         working-directory: source
         run: |
           sed -i 's/applicationId = "com.github.libretube"/applicationId = "app.weqextube"/' app/build.gradle.kts
@@ -33,38 +33,86 @@ jobs:
           sed -i 's/resValue("string", "app_name", "LibreTube")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/rootProject.name = "LibreTube"/rootProject.name = "WeqexTube"/' settings.gradle.kts
-          sed -Ei 's/versionCode = [0-9]+/versionCode = 4/' app/build.gradle.kts
-          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.3"/' app/build.gradle.kts
+          sed -Ei 's/versionCode = [0-9]+/versionCode = 5/' app/build.gradle.kts
+          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.4"/' app/build.gradle.kts
           find app/src/main/res -path '*/strings.xml' -exec sed -i 's/LibreTube/WeqexTube/g' {} +
+
+          # Debug resources override main resources. Remove the old debug launcher
+          # artwork so every build variant must use the WeqexTube resources below.
+          rm -rf app/src/debug/res
+
+          # Remove LibreTube's selectable icon aliases. This prevents a previously
+          # selected alternative icon from surviving an update.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          manifest = Path("app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+          text = re.sub(
+              r'\s*<activity-alias\b(?=[^>]*android:name="\.(?:IconGradient|DefaultLight|IconFire|IconFlame|IconShaped|IconTorch|IconLegacy|IconBird)")[\s\S]*?</activity-alias>',
+              '',
+              text,
+          )
+          manifest.write_text(text)
+          PY
+
+          # Use the WeqexTube artwork for launcher, round icon, adaptive icon,
+          # splash screen and the icon shown on the About page.
           sed -i 's|@drawable/splash_icon|@mipmap/ic_launcher_foreground|g' app/src/main/res/values/themes.xml app/src/main/res/values-night/themes.xml app/src/main/res/drawable/splash_anim.xml
-          sed -Ei 's/newpipeextractor = "[^"]+"/newpipeextractor = "738c3d4"/' gradle/libs.versions.toml
+          sed -i 's|@drawable/ic_launcher_lockscreen|@mipmap/ic_launcher|g' app/src/main/res/layout/app_icon_header.xml
+          sed -i 's/newpipeextractor = "[^"]*"/newpipeextractor = "738c3d4"/' gradle/libs.versions.toml
+
           for spec in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
             set -- $spec
-            rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "app/src/main/res/mipmap-$1/ic_launcher.png"
-            rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "app/src/main/res/mipmap-$1/ic_launcher_round.png"
-            rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "app/src/main/res/mipmap-$1/ic_launcher_foreground.png"
+            directory="app/src/main/res/mipmap-$1"
+            rsvg-convert --width "$2" --height "$2" "$GITHUB_WORKSPACE/assets/weqextube-icon.svg" > "$directory/ic_launcher.png"
+            cp "$directory/ic_launcher.png" "$directory/ic_launcher_round.png"
+            cp "$directory/ic_launcher.png" "$directory/ic_launcher_foreground.png"
           done
 
-      - name: Verify version and branding
+          # Keep Android 13 themed icons from showing LibreTube's old logo.
+          cp app/src/main/res/drawable/ic_launcher_monochrome.xml /tmp/original-monochrome.xml
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#1D2C3E" android:pathData="M23,48 L31,48 L31,60 L23,60 Z M36,40 L44,40 L44,68 L36,68 Z M49,31 L57,31 L57,77 L49,77 Z M62,39 L86,54 L62,69 Z"/></vector>' > app/src/main/res/drawable/ic_launcher_monochrome.xml
+
+      - name: Verify source branding
         working-directory: source
         run: |
           grep -q 'applicationId = "app.weqextube"' app/build.gradle.kts
-          grep -q 'versionCode = 4' app/build.gradle.kts
-          grep -q 'versionName = "1.0.3"' app/build.gradle.kts
+          grep -q 'versionCode = 5' app/build.gradle.kts
+          grep -q 'versionName = "1.0.4"' app/build.gradle.kts
           grep -q 'newpipeextractor = "738c3d4"' gradle/libs.versions.toml
+          test ! -d app/src/debug/res
+          test "$(grep -c '<activity-alias' app/src/main/AndroidManifest.xml)" -eq 1
           if grep -R "LibreTube" app/src/main/res/values*/strings.xml; then
             exit 1
           fi
+          expected="$(sha256sum app/src/main/res/mipmap-xxxhdpi/ic_launcher.png | cut -d' ' -f1)"
+          printf '%s' "$expected" > "$GITHUB_WORKSPACE/expected-icon.sha256"
 
       - name: Build installable APK
         working-directory: source
         run: ./gradlew --no-daemon --refresh-dependencies :app:assembleDebug
 
-      - name: Prepare direct APK
-        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.3.apk
+      - name: Inspect the finished APK
+        run: |
+          apk="source/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$apk"
+          unzip -p "$apk" res/mipmap-xxxhdpi-v4/ic_launcher.png > /tmp/apk-launcher.png
+          actual="$(sha256sum /tmp/apk-launcher.png | cut -d' ' -f1)"
+          expected="$(cat expected-icon.sha256)"
+          test "$actual" = "$expected"
+          strings "$apk" | grep -q "WeqexTube"
+          if strings "$apk" | grep -q "LibreTube Debug"; then
+            exit 1
+          fi
+          apksigner verify "$apk"
+          sha256sum "$apk"
 
-      - name: Publish new direct APK download
+      - name: Prepare direct APK
+        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.4.apk
+
+      - name: Publish verified direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.0.3 WeqexTube-1.0.3.apk --title "WeqexTube 1.0.3" --notes "Новая отдельная сборка из актуального исходного кода LibreTube. Версия и ресурсы WeqexTube проверяются перед созданием APK."
+          gh release create v1.0.4 WeqexTube-1.0.4.apk --title "WeqexTube 1.0.4" --notes "Исправлена настоящая причина старой иконки: удалены перекрывающие debug-ресурсы и альтернативные значки LibreTube. Готовый APK проверен после упаковки."
