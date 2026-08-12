@@ -25,7 +25,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y imagemagick apksigner
 
-      - name: Apply complete WeqexTube 1.0.6 branding
+      - name: Apply complete WeqexTube 1.0.7 branding
         working-directory: source
         run: |
           sed -i 's/applicationId = "com.github.libretube"/applicationId = "app.weqextube"/' app/build.gradle.kts
@@ -33,8 +33,8 @@ jobs:
           sed -i 's/resValue("string", "app_name", "LibreTube")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/rootProject.name = "LibreTube"/rootProject.name = "WeqexTube"/' settings.gradle.kts
-          sed -Ei 's/versionCode = [0-9]+/versionCode = 7/' app/build.gradle.kts
-          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.6"/' app/build.gradle.kts
+          sed -Ei 's/versionCode = [0-9]+/versionCode = 8/' app/build.gradle.kts
+          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.7"/' app/build.gradle.kts
 
           python3 - <<'PY'
           from pathlib import Path
@@ -82,6 +82,119 @@ jobs:
                   text = text.replace(old, new)
               path.write_text(text)
 
+          # Replace the wordmark that LibreTube hard-codes in ThemeHelper.
+          theme_helper = Path("app/src/main/java/com/github/libretube/helpers/ThemeHelper.kt")
+          text = theme_helper.read_text()
+          text = text.replace(
+              'return "Libre<span  style=\'color:$hexColor\';>Tube</span>"',
+              'return "Weqex<span  style=\'color:$hexColor\';>Tube</span>"',
+          )
+          text = text.replace(
+              'if (accentColor.isEmpty()) {',
+              'if (accentColor.isEmpty() || accentColor == "my") {',
+          )
+          text = text.replace(
+              'accentColor = if (DynamicColors.isDynamicColorAvailable()) "my" else "blue"',
+              'accentColor = "weqex"',
+          )
+          text = text.replace(
+              '"violet" -> R.style.Theme_Violet',
+              '"violet" -> R.style.Theme_Violet\n            "weqex" -> R.style.Theme_Weqex',
+          )
+          theme_helper.write_text(text)
+
+          # Add a fixed soft light palette so the phone wallpaper cannot turn
+          # WeqexTube pink through Android dynamic colors.
+          weqex_style = """
+              <style name="Theme.Weqex" parent="BaseTheme">
+                  <item name="colorPrimary">#213148</item>
+                  <item name="colorOnPrimary">#FFFFFF</item>
+                  <item name="colorPrimaryContainer">#DDE6F0</item>
+                  <item name="colorOnPrimaryContainer">#172235</item>
+                  <item name="colorSecondary">#50627A</item>
+                  <item name="colorOnSecondary">#FFFFFF</item>
+                  <item name="colorSecondaryContainer">#E3EAF2</item>
+                  <item name="colorOnSecondaryContainer">#1D2C3E</item>
+                  <item name="colorSurface">#EEF3F8</item>
+                  <item name="colorOnSurface">#1D2C3E</item>
+                  <item name="colorSurfaceVariant">#E5EBF2</item>
+                  <item name="colorOnSurfaceVariant">#445267</item>
+                  <item name="colorSurfaceContainer">#E9EFF5</item>
+                  <item name="colorOutline">#93A1B2</item>
+                  <item name="android:colorBackground">#EEF3F8</item>
+                  <item name="android:navigationBarColor">#EEF3F8</item>
+                  <item name="android:statusBarColor">#EEF3F8</item>
+                  <item name="android:windowLightStatusBar">true</item>
+                  <item name="android:windowLightNavigationBar">true</item>
+              </style>
+          """
+          for path in [
+              Path("app/src/main/res/values/themes.xml"),
+              Path("app/src/main/res/values-night/themes.xml"),
+          ]:
+              text = path.read_text()
+              text = text.replace("</resources>", weqex_style + "\n</resources>")
+              path.write_text(text)
+
+          Path("app/src/main/res/drawable/weqex_panel.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+              <solid android:color="#E9EFF5"/>
+              <corners android:radius="22dp"/>
+              <stroke android:width="1dp" android:color="#F9FBFD"/>
+              <padding android:left="8dp" android:top="6dp" android:right="8dp" android:bottom="6dp"/>
+          </shape>
+          """)
+          Path("app/src/main/res/drawable/weqex_card.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
+          <selector xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:state_pressed="true">
+                  <shape android:shape="rectangle">
+                      <solid android:color="#DDE6F0"/>
+                      <corners android:radius="18dp"/>
+                      <stroke android:width="1dp" android:color="#C8D3DF"/>
+                  </shape>
+              </item>
+              <item>
+                  <shape android:shape="rectangle">
+                      <solid android:color="#EEF3F8"/>
+                      <corners android:radius="18dp"/>
+                      <stroke android:width="1dp" android:color="#FFFFFF"/>
+                  </shape>
+              </item>
+          </selector>
+          """)
+
+          # Restyle the visible shell and video cards instead of only changing
+          # the launcher icon.
+          activity_main = Path("app/src/main/res/layout/activity_main.xml")
+          text = activity_main.read_text()
+          text = text.replace(
+              'android:background="@android:color/transparent"\n        app:layout_constraintStart_toStartOf="parent"',
+              'android:background="@drawable/weqex_panel"\n        android:elevation="6dp"\n        app:layout_constraintStart_toStartOf="parent"',
+          )
+          text = text.replace(
+              'android:id="@+id/bottomNav"\n        android:layout_width="match_parent"',
+              'android:id="@+id/bottomNav"\n        android:layout_width="match_parent"\n        android:background="@drawable/weqex_panel"\n        android:elevation="10dp"',
+          )
+          activity_main.write_text(text)
+
+          for layout_name in ["fragment_home.xml", "fragment_trends.xml", "fragment_trends_content.xml"]:
+              path = Path("app/src/main/res/layout") / layout_name
+              text = path.read_text()
+              first = 'android:layout_height="match_parent"'
+              text = text.replace(first, first + '\n    android:background="#EEF3F8"', 1)
+              path.write_text(text)
+
+          card = Path("app/src/main/res/layout/trending_row.xml")
+          text = card.read_text()
+          text = text.replace('android:background="@drawable/rounded_ripple"', 'android:background="@drawable/weqex_card"')
+          text = text.replace(
+              'android:layout_height="wrap_content"\n    android:background',
+              'android:layout_height="wrap_content"\n    android:layout_margin="6dp"\n    android:elevation="3dp"\n    android:background',
+              1,
+          )
+          text = text.replace('app:cardCornerRadius="8dp"', 'app:cardCornerRadius="16dp"', 1)
+          card.write_text(text)
+
           # Remove all selectable alternative launcher aliases so Android cannot
           # retain an old LibreTube icon selected in an earlier installation.
           manifest = Path("app/src/main/AndroidManifest.xml")
@@ -116,13 +229,17 @@ jobs:
         working-directory: source
         run: |
           grep -q 'applicationId = "app.weqextube"' app/build.gradle.kts
-          grep -q 'versionCode = 7' app/build.gradle.kts
-          grep -q 'versionName = "1.0.6"' app/build.gradle.kts
+          grep -q 'versionCode = 8' app/build.gradle.kts
+          grep -q 'versionName = "1.0.7"' app/build.gradle.kts
           grep -q '<string name="app_name" translatable="false">WeqexTube</string>' app/src/main/res/values/strings.xml
           grep -q '<string name="about">О WeqexTube</string>' app/src/main/res/values-ru/strings.xml
           grep -q 'Добро пожаловать в WeqexTube' app/src/main/res/values-ru/strings.xml
           grep -q 'svmapo-afk/WeqexTube/releases/latest' app/src/main/java/com/github/libretube/api/ExternalApi.kt
           grep -q 'weqextube-backup-' app/src/main/java/com/github/libretube/ui/preferences/BackupRestoreSettings.kt
+          grep -q 'return "Weqex<span' app/src/main/java/com/github/libretube/helpers/ThemeHelper.kt
+          grep -q '"weqex" -> R.style.Theme_Weqex' app/src/main/java/com/github/libretube/helpers/ThemeHelper.kt
+          grep -q 'style name="Theme.Weqex"' app/src/main/res/values/themes.xml
+          grep -q '@drawable/weqex_card' app/src/main/res/layout/trending_row.xml
           test ! -d app/src/debug/res
           test "$(grep -c '<activity-alias' app/src/main/AndroidManifest.xml)" -eq 1
           if grep -R -i "libretube" app/src/main/res/values*/strings.xml; then
@@ -142,7 +259,7 @@ jobs:
 
           aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           "$aapt" dump badging "$apk" | tee /tmp/badging.txt
-          grep -q "package: name='app.weqextube' versionCode='7' versionName='1.0.6'" /tmp/badging.txt
+          grep -q "package: name='app.weqextube' versionCode='8' versionName='1.0.7'" /tmp/badging.txt
           grep -q "application-label:'WeqexTube'" /tmp/badging.txt
 
           "$aapt" dump resources "$apk" > /tmp/resources.txt
@@ -160,10 +277,10 @@ jobs:
           sha256sum "$apk"
 
       - name: Prepare direct APK
-        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.6.apk
+        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.7.apk
 
       - name: Publish verified direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.0.6 WeqexTube-1.0.6.apk --title "WeqexTube 1.0.6" --notes "Использована именно предоставленная пользователем иконка без перерисовки. Полный пользовательский ребрендинг WeqexTube; название, версия, строки и точный хэш упакованной иконки проверены внутри APK."
+          gh release create v1.0.7 WeqexTube-1.0.7.apk --title "WeqexTube 1.0.7" --notes "Исправлен жёстко прописанный заголовок LibreTube. Добавлена фиксированная светлая серо-синяя тема WeqexTube, обновлены шапка, фон, карточки и нижняя панель. Ошибка блокировки YouTube по IP пока не заявлена как исправленная."
