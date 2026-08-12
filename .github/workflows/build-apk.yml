@@ -180,9 +180,18 @@ jobs:
           for layout_name in ["fragment_home.xml", "fragment_trends.xml", "fragment_trends_content.xml"]:
               path = Path("app/src/main/res/layout") / layout_name
               text = path.read_text()
-              first = 'android:layout_height="match_parent"'
-              text = text.replace(first, first + '\n    android:background="#EEF3F8"', 1)
-              path.write_text(text)
+              head, rest = text.split(">", 1)
+              if "android:background=" in head:
+                  head = re.sub(
+                      r'android:background="[^"]*"',
+                      'android:background="#EEF3F8"',
+                      head,
+                      count=1,
+                  )
+              else:
+                  first = 'android:layout_height="match_parent"'
+                  head = head.replace(first, first + '\n    android:background="#EEF3F8"', 1)
+              path.write_text(head + ">" + rest)
 
           card = Path("app/src/main/res/layout/trending_row.xml")
           text = card.read_text()
