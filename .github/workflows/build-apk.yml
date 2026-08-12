@@ -284,28 +284,30 @@ jobs:
 
           media_repository = Path("app/src/main/java/com/github/libretube/api/MediaServiceRepository.kt")
           text = media_repository.read_text()
-          old = textwrap.dedent("""
-                  val instance: MediaServiceRepository
-                      get() = when {
-                          PlayerHelper.fullLocalMode -> NewPipeMediaServiceRepository()
-                          PlayerHelper.localStreamExtraction -> LocalStreamsExtractionPipedMediaServiceRepository()
-                          else -> PipedMediaServiceRepository()
-                      }
-          """).lstrip()
-          new = textwrap.dedent("""
-                  val instance: MediaServiceRepository
-                      get() {
-                          val primary = when {
-                              PlayerHelper.fullLocalMode -> NewPipeMediaServiceRepository()
-                              PlayerHelper.localStreamExtraction -> LocalStreamsExtractionPipedMediaServiceRepository()
-                              else -> PipedMediaServiceRepository()
-                          }
-                          return ResilientMediaServiceRepository(
-                              primary = primary,
-                              fallbackOnAnyError = primary is PipedMediaServiceRepository,
-                          )
-                      }
-          """).lstrip()
+          old = "\n".join([
+              "        val instance: MediaServiceRepository",
+              "            get() = when {",
+              "                PlayerHelper.fullLocalMode -> NewPipeMediaServiceRepository()",
+              "                PlayerHelper.localStreamExtraction -> LocalStreamsExtractionPipedMediaServiceRepository()",
+              "                else -> PipedMediaServiceRepository()",
+              "            }",
+              "",
+          ])
+          new = "\n".join([
+              "        val instance: MediaServiceRepository",
+              "            get() {",
+              "                val primary = when {",
+              "                    PlayerHelper.fullLocalMode -> NewPipeMediaServiceRepository()",
+              "                    PlayerHelper.localStreamExtraction -> LocalStreamsExtractionPipedMediaServiceRepository()",
+              "                    else -> PipedMediaServiceRepository()",
+              "                }",
+              "                return ResilientMediaServiceRepository(",
+              "                    primary = primary,",
+              "                    fallbackOnAnyError = primary is PipedMediaServiceRepository,",
+              "                )",
+              "            }",
+              "",
+          ])
           if old not in text:
               raise SystemExit("MediaServiceRepository factory structure changed upstream")
           media_repository.write_text(text.replace(old, new))
