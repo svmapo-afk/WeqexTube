@@ -18,14 +18,14 @@ jobs:
       - name: Fetch latest LibreTube source
         run: |
           git clone --depth 1 https://github.com/libre-tube/LibreTube.git source
-          git -C source log -1 --format='LibreTube source: %H (%cs)'
+          git -C source log -1 --format='Upstream source: %H (%cs)'
 
       - name: Install build inspection tools
         run: |
           sudo apt-get update
           sudo apt-get install -y librsvg2-bin apksigner
 
-      - name: Apply verified WeqexTube 1.0.4 branding
+      - name: Apply complete WeqexTube 1.0.5 branding
         working-directory: source
         run: |
           sed -i 's/applicationId = "com.github.libretube"/applicationId = "app.weqextube"/' app/build.gradle.kts
@@ -33,19 +33,57 @@ jobs:
           sed -i 's/resValue("string", "app_name", "LibreTube")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/rootProject.name = "LibreTube"/rootProject.name = "WeqexTube"/' settings.gradle.kts
-          sed -Ei 's/versionCode = [0-9]+/versionCode = 5/' app/build.gradle.kts
-          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.4"/' app/build.gradle.kts
-          find app/src/main/res -path '*/strings.xml' -exec sed -i 's/LibreTube/WeqexTube/g' {} +
+          sed -Ei 's/versionCode = [0-9]+/versionCode = 6/' app/build.gradle.kts
+          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.5"/' app/build.gradle.kts
 
-          # Debug resources override main resources. Remove the old debug launcher
-          # artwork so every build variant must use the WeqexTube resources below.
-          rm -rf app/src/debug/res
-
-          # Remove LibreTube's selectable icon aliases. This prevents a previously
-          # selected alternative icon from surviving an update.
           python3 - <<'PY'
           from pathlib import Path
           import re
+
+          # Replace every user-visible localized occurrence, including spellings
+          # such as "Libretube" that the previous case-sensitive replacement missed.
+          for path in Path("app/src/main/res").glob("values*/strings.xml"):
+              text = path.read_text()
+              path.write_text(re.sub(r"libretube", "WeqexTube", text, flags=re.IGNORECASE))
+
+          # Rebrand user-visible links, backup names and the update channel.
+          replacements = {
+              Path("app/src/main/java/com/github/libretube/ui/preferences/BackupRestoreSettings.kt"): {
+                  "libretube-backup-": "weqextube-backup-",
+              },
+              Path("app/src/main/java/com/github/libretube/api/ExternalApi.kt"): {
+                  "https://api.github.com/repos/libre-tube/LibreTube/releases/latest":
+                      "https://api.github.com/repos/svmapo-afk/WeqexTube/releases/latest",
+              },
+              Path("app/src/main/java/com/github/libretube/ui/activities/AboutActivity.kt"): {
+                  "https://github.com/libre-tube/LibreTube#donate":
+                      "https://github.com/svmapo-afk/WeqexTube",
+                  "https://libretube.dev":
+                      "https://github.com/svmapo-afk/WeqexTube",
+                  "https://github.com/libre-tube/LibreTube":
+                      "https://github.com/svmapo-afk/WeqexTube",
+                  "https://hosted.weblate.org/projects/libretube/libretube/":
+                      "https://github.com/svmapo-afk/WeqexTube",
+              },
+              Path("app/src/main/java/com/github/libretube/ui/activities/HelpActivity.kt"): {
+                  "https://libretube.dev/#faq":
+                      "https://github.com/svmapo-afk/WeqexTube",
+                  "https://matrix.to/#/#LibreTube:matrix.org":
+                      "https://github.com/svmapo-afk/WeqexTube/issues",
+                  "https://fosstodon.org/@libretube":
+                      "https://github.com/svmapo-afk/WeqexTube/issues",
+                  "https://feddit.rocks/c/libretube":
+                      "https://github.com/svmapo-afk/WeqexTube/issues",
+              },
+          }
+          for path, items in replacements.items():
+              text = path.read_text()
+              for old, new in items.items():
+                  text = text.replace(old, new)
+              path.write_text(text)
+
+          # Remove all selectable alternative launcher aliases so Android cannot
+          # retain an old LibreTube icon selected in an earlier installation.
           manifest = Path("app/src/main/AndroidManifest.xml")
           text = manifest.read_text()
           text = re.sub(
@@ -56,11 +94,12 @@ jobs:
           manifest.write_text(text)
           PY
 
-          # Use the WeqexTube artwork for launcher, round icon, adaptive icon,
-          # splash screen and the icon shown on the About page.
+          # Debug resources override main. Removing them is required for the
+          # packaged APK to use WeqexTube's launcher artwork and app label.
+          rm -rf app/src/debug/res
+
           sed -i 's|@drawable/splash_icon|@mipmap/ic_launcher_foreground|g' app/src/main/res/values/themes.xml app/src/main/res/values-night/themes.xml app/src/main/res/drawable/splash_anim.xml
           sed -i 's|@drawable/ic_launcher_lockscreen|@mipmap/ic_launcher|g' app/src/main/res/layout/app_icon_header.xml
-          sed -i 's/newpipeextractor = "[^"]*"/newpipeextractor = "738c3d4"/' gradle/libs.versions.toml
 
           for spec in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
             set -- $spec
@@ -70,20 +109,22 @@ jobs:
             cp "$directory/ic_launcher.png" "$directory/ic_launcher_foreground.png"
           done
 
-          # Keep Android 13 themed icons from showing LibreTube's old logo.
-          cp app/src/main/res/drawable/ic_launcher_monochrome.xml /tmp/original-monochrome.xml
           printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#1D2C3E" android:pathData="M23,48 L31,48 L31,60 L23,60 Z M36,40 L44,40 L44,68 L36,68 Z M49,31 L57,31 L57,77 L49,77 Z M62,39 L86,54 L62,69 Z"/></vector>' > app/src/main/res/drawable/ic_launcher_monochrome.xml
 
-      - name: Verify source branding
+      - name: Verify all visible source branding
         working-directory: source
         run: |
           grep -q 'applicationId = "app.weqextube"' app/build.gradle.kts
-          grep -q 'versionCode = 5' app/build.gradle.kts
-          grep -q 'versionName = "1.0.4"' app/build.gradle.kts
-          grep -q 'newpipeextractor = "738c3d4"' gradle/libs.versions.toml
+          grep -q 'versionCode = 6' app/build.gradle.kts
+          grep -q 'versionName = "1.0.5"' app/build.gradle.kts
+          grep -q '<string name="app_name" translatable="false">WeqexTube</string>' app/src/main/res/values/strings.xml
+          grep -q '<string name="about">О WeqexTube</string>' app/src/main/res/values-ru/strings.xml
+          grep -q 'Добро пожаловать в WeqexTube' app/src/main/res/values-ru/strings.xml
+          grep -q 'svmapo-afk/WeqexTube/releases/latest' app/src/main/java/com/github/libretube/api/ExternalApi.kt
+          grep -q 'weqextube-backup-' app/src/main/java/com/github/libretube/ui/preferences/BackupRestoreSettings.kt
           test ! -d app/src/debug/res
           test "$(grep -c '<activity-alias' app/src/main/AndroidManifest.xml)" -eq 1
-          if grep -R "LibreTube" app/src/main/res/values*/strings.xml; then
+          if grep -R -i "libretube" app/src/main/res/values*/strings.xml; then
             exit 1
           fi
           expected="$(sha256sum app/src/main/res/mipmap-xxxhdpi/ic_launcher.png | cut -d' ' -f1)"
@@ -93,26 +134,35 @@ jobs:
         working-directory: source
         run: ./gradlew --no-daemon --refresh-dependencies :app:assembleDebug
 
-      - name: Inspect the finished APK
+      - name: Inspect packaged name, version, strings and icon
         run: |
           apk="source/app/build/outputs/apk/debug/app-debug.apk"
           test -f "$apk"
+
+          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$aapt" dump badging "$apk" | tee /tmp/badging.txt
+          grep -q "package: name='app.weqextube' versionCode='6' versionName='1.0.5'" /tmp/badging.txt
+          grep -q "application-label:'WeqexTube'" /tmp/badging.txt
+
+          "$aapt" dump resources "$apk" > /tmp/resources.txt
+          if grep -Eqi 'LibreTube|Libretube' /tmp/resources.txt; then
+            grep -Ei 'LibreTube|Libretube' /tmp/resources.txt
+            exit 1
+          fi
+
           unzip -p "$apk" res/mipmap-xxxhdpi-v4/ic_launcher.png > /tmp/apk-launcher.png
           actual="$(sha256sum /tmp/apk-launcher.png | cut -d' ' -f1)"
           expected="$(cat expected-icon.sha256)"
           test "$actual" = "$expected"
-          strings "$apk" | grep -q "WeqexTube"
-          if strings "$apk" | grep -q "LibreTube Debug"; then
-            exit 1
-          fi
+
           apksigner verify "$apk"
           sha256sum "$apk"
 
       - name: Prepare direct APK
-        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.4.apk
+        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.5.apk
 
       - name: Publish verified direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.0.4 WeqexTube-1.0.4.apk --title "WeqexTube 1.0.4" --notes "Исправлена настоящая причина старой иконки: удалены перекрывающие debug-ресурсы и альтернативные значки LibreTube. Готовый APK проверен после упаковки."
+          gh release create v1.0.5 WeqexTube-1.0.5.apk --title "WeqexTube 1.0.5" --notes "Полный пользовательский ребрендинг: название WeqexTube во всех переводах, экран О приложении, приветствие, музыкальный режим, резервные копии, ссылки и канал обновлений. Имя, версия, строки и иконка проверены внутри готового APK."
