@@ -39,6 +39,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
+          import textwrap
 
           # Replace every user-visible localized occurrence, including spellings
           # such as "Libretube" that the previous case-sensitive replacement missed.
@@ -207,100 +208,104 @@ jobs:
           # Add automatic playback recovery. Local extraction remains the first
           # choice. If YouTube blocks the phone/VPN IP, retry through healthy
           # independent Piped endpoints instead of immediately failing.
-          Path("app/src/main/java/com/github/libretube/api/ResilientMediaServiceRepository.kt").write_text("""package com.github.libretube.api
+          resilient_source = textwrap.dedent("""
+          package com.github.libretube.api
 
-import com.github.libretube.api.obj.Streams
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.withTimeout
-import org.schabi.newpipe.extractor.exceptions.SignInConfirmNotBotException
+          import com.github.libretube.api.obj.Streams
+          import kotlinx.coroutines.CancellationException
+          import kotlinx.coroutines.withTimeout
+          import org.schabi.newpipe.extractor.exceptions.SignInConfirmNotBotException
 
-internal class ResilientMediaServiceRepository(
-    private val primary: MediaServiceRepository,
-    private val fallbackOnAnyError: Boolean = false,
-) : MediaServiceRepository by primary {
-    override suspend fun getStreams(videoId: String): Streams {
-        val firstError = try {
-            return primary.getStreams(videoId)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            error
-        }
+          internal class ResilientMediaServiceRepository(
+              private val primary: MediaServiceRepository,
+              private val fallbackOnAnyError: Boolean = false,
+          ) : MediaServiceRepository by primary {
+              override suspend fun getStreams(videoId: String): Streams {
+                  val firstError = try {
+                      return primary.getStreams(videoId)
+                  } catch (error: CancellationException) {
+                      throw error
+                  } catch (error: Exception) {
+                      error
+                  }
 
-        if (!fallbackOnAnyError && !firstError.isAnonymousYouTubeBlock()) {
-            throw firstError
-        }
+                  if (!fallbackOnAnyError && !firstError.isAnonymousYouTubeBlock()) {
+                      throw firstError
+                  }
 
-        val endpoints = listOf(
-            PipedMediaServiceRepository.apiUrl,
-            "https://api.piped.private.coffee",
-            "https://pipedapi.orangenet.cc",
-        ).distinct()
+                  val endpoints = listOf(
+                      PipedMediaServiceRepository.apiUrl,
+                      "https://api.piped.private.coffee",
+                      "https://pipedapi.orangenet.cc",
+                  ).distinct()
 
-        for (endpoint in endpoints) {
-            try {
-                return withTimeout(12_000) {
-                    RetrofitInstance.buildRetrofitInstance<PipedApi>(endpoint)
-                        .getStreams(videoId)
-                        .also { streams ->
-                            streams.isShort = streams.videoStreams.firstOrNull()?.let { stream ->
-                                (stream.height ?: 0) > (stream.width ?: 0)
-                            } ?: false
-                        }
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                firstError.addSuppressed(error)
-            }
-        }
+                  for (endpoint in endpoints) {
+                      try {
+                          return withTimeout(12_000) {
+                              RetrofitInstance.buildRetrofitInstance<PipedApi>(endpoint)
+                                  .getStreams(videoId)
+                                  .also { streams ->
+                                      streams.isShort = streams.videoStreams.firstOrNull()?.let { stream ->
+                                          (stream.height ?: 0) > (stream.width ?: 0)
+                                      } ?: false
+                                  }
+                          }
+                      } catch (error: CancellationException) {
+                          throw error
+                      } catch (error: Exception) {
+                          firstError.addSuppressed(error)
+                      }
+                  }
 
-        throw firstError
-    }
-}
+                  throw firstError
+              }
+          }
 
-private fun Throwable.isAnonymousYouTubeBlock(): Boolean {
-    var current: Throwable? = this
-    repeat(12) {
-        val error = current ?: return false
-        if (error is SignInConfirmNotBotException) return true
+          private fun Throwable.isAnonymousYouTubeBlock(): Boolean {
+              var current: Throwable? = this
+              repeat(12) {
+                  val error = current ?: return false
+                  if (error is SignInConfirmNotBotException) return true
 
-        val message = error.message.orEmpty().lowercase()
-        if (
-            "login_required" in message ||
-            "confirm that you're not a bot" in message ||
-            "confirm you’re not a bot" in message ||
-            "anonymous watch access" in message
-        ) return true
+                  val message = error.message.orEmpty().lowercase()
+                  if (
+                      "login_required" in message ||
+                      "confirm that you're not a bot" in message ||
+                      "confirm you’re not a bot" in message ||
+                      "anonymous watch access" in message
+                  ) return true
 
-        current = error.cause
-    }
-    return false
-}
-""")
+                  current = error.cause
+              }
+              return false
+          }
+          """).lstrip()
+          Path("app/src/main/java/com/github/libretube/api/ResilientMediaServiceRepository.kt").write_text(resilient_source)
 
           media_repository = Path("app/src/main/java/com/github/libretube/api/MediaServiceRepository.kt")
           text = media_repository.read_text()
-          old = """        val instance: MediaServiceRepository
-            get() = when {
-                PlayerHelper.fullLocalMode -> NewPipeMediaServiceRepository()
-                PlayerHelper.localStreamExtraction -> LocalStreamsExtractionPipedMediaServiceRepository()
-                else -> PipedMediaServiceRepository()
-            }
-"""
-          new = """        val instance: MediaServiceRepository
-            get() {
-                val primary = when {
-                    PlayerHelper.fullLocalMode -> NewPipeMediaServiceRepository()
-                    PlayerHelper.localStreamExtraction -> LocalStreamsExtractionPipedMediaServiceRepository()
-                    else -> PipedMediaServiceRepository()
-                }
-                return ResilientMediaServiceRepository(
-                    primary = primary,
-                    fallbackOnAnyError = primary is PipedMediaServiceRepository,
-                )
-            }
-"""
+          old = textwrap.dedent("""
+                  val instance: MediaServiceRepository
+                      get() = when {
+                          PlayerHelper.fullLocalMode -> NewPipeMediaServiceRepository()
+                          PlayerHelper.localStreamExtraction -> LocalStreamsExtractionPipedMediaServiceRepository()
+                          else -> PipedMediaServiceRepository()
+                      }
+          """).lstrip()
+          new = textwrap.dedent("""
+                  val instance: MediaServiceRepository
+                      get() {
+                          val primary = when {
+                              PlayerHelper.fullLocalMode -> NewPipeMediaServiceRepository()
+                              PlayerHelper.localStreamExtraction -> LocalStreamsExtractionPipedMediaServiceRepository()
+                              else -> PipedMediaServiceRepository()
+                          }
+                          return ResilientMediaServiceRepository(
+                              primary = primary,
+                              fallbackOnAnyError = primary is PipedMediaServiceRepository,
+                          )
+                      }
+          """).lstrip()
           if old not in text:
               raise SystemExit("MediaServiceRepository factory structure changed upstream")
           media_repository.write_text(text.replace(old, new))
