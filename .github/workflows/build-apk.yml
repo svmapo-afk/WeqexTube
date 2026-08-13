@@ -451,21 +451,21 @@ jobs:
 
           manifest = Path("app/src/main/AndroidManifest.xml")
           text = manifest.read_text()
-          marker = """        <activity
-              android:name=".ui.activities.SettingsActivity"
-              android:label="@string/settings"
-              android:screenOrientation="locked" />
-          """
-          activity = """
-          <activity
+          about_key = 'android:name=".ui.activities.AboutActivity"'
+          about_position = text.find(about_key)
+          if about_position < 0:
+              raise SystemExit("AndroidManifest AboutActivity missing")
+          activity_start = text.rfind("<activity", 0, about_position)
+          if activity_start < 0:
+              raise SystemExit("AndroidManifest activity insertion point missing")
+          activity = """<activity
               android:name=".ui.activities.YoutubeLoginActivity"
               android:exported="false"
               android:label="YouTube-аккаунт"
               android:screenOrientation="locked" />
+
           """
-          if marker not in text:
-              raise SystemExit("AndroidManifest activity structure changed upstream")
-          manifest.write_text(text.replace(marker, marker + activity, 1))
+          manifest.write_text(text[:activity_start] + activity + text[activity_start:])
           PY
 
           # Debug resources override main. Removing them is required for the
