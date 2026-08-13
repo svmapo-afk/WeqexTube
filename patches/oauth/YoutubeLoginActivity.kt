@@ -1,31 +1,41 @@
 package com.github.libretube.ui.activities
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Intent
 import android.graphics.Typeface
-import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
-import androidx.lifecycle.lifecycleScope
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import com.github.libretube.oauth.YoutubeOAuthManager
 import com.github.libretube.ui.base.BaseActivity
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.auth.api.identity.RevokeAccessRequest
 
 class YoutubeLoginActivity : BaseActivity() {
     private lateinit var status: TextView
-    private lateinit var code: TextView
-    private lateinit var startButton: Button
-    private lateinit var openButton: Button
+    private lateinit var loginButton: Button
     private lateinit var signOutButton: Button
-    private var verificationUrl = "https://www.google.com/device"
-    private var pollingJob: Job? = null
+
+    private val authorizationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { activityResult ->
+        val data = activityResult.data
+        if (data == null) {
+            showFailure("Вход отменён.")
+            return@registerForActivityResult
+        }
+        runCatching {
+            Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(data)
+        }.onSuccess { result ->
+            if (YoutubeOAuthManager.accept(result) != null) showAuthorized()
+            else showFailure("Google не вернул токен YouTube.")
+        }.onFailure {
+            showFailure("Ошибка авторизации Google: ${it.message.orEmpty()}")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,80 +53,84 @@ class YoutubeLoginActivity : BaseActivity() {
             setTypeface(typeface, Typeface.BOLD)
         }, matchWrap())
         layout.addView(TextView(this).apply {
-            text = "Авторизация нужна только для запросов YouTube. Пароль приложение не получает. Токен хранится зашифрованным на этом телефоне."
+            text = "WeqexTube запросит доступ только для чтения YouTube. Пароль и client_secret приложение не получает и не хранит."
             textSize = 16f
             setPadding(0, padding / 2, 0, padding)
         }, matchWrap())
-        status = TextView(this).apply { textSize = 16f; gravity = Gravity.CENTER }
-        layout.addView(status, matchWrap())
-        code = TextView(this).apply {
-            textSize = 30f
+        status = TextView(this).apply {
+            textSize = 17f
             gravity = Gravity.CENTER
-            setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
             setPadding(0, padding, 0, padding)
-            setOnClickListener {
-                if (text.isNotBlank()) {
-                    getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Код Google", text))
-                    Toast.makeText(this@YoutubeLoginActivity, "Код скопирован", Toast.LENGTH_SHORT).show()
-                }
-            }
         }
-        layout.addView(code, matchWrap())
-        startButton = Button(this).apply { text = "Получить код"; setOnClickListener { startLogin() } }
-        layout.addView(startButton, matchWrap())
-        openButton = Button(this).apply {
-            text = "Открыть Google и ввести код"
-            isEnabled = false
-            setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(verificationUrl))) }
+        layout.addView(status, matchWrap())
+        loginButton = Button(this).apply {
+            text = "ВОЙТИ ЧЕРЕЗ GOOGLE"
+            setOnClickListener { authorize() }
         }
-        layout.addView(openButton, matchWrap())
+        layout.addView(loginButton, matchWrap())
         signOutButton = Button(this).apply {
-            text = "Выйти из аккаунта"
-            setOnClickListener { YoutubeOAuthManager.signOut(); updateSignedInState() }
+            text = "ОТКЛЮЧИТЬ GOOGLE-АККАУНТ"
+            setOnClickListener { revokeAccess() }
         }
         layout.addView(signOutButton, matchWrap())
         setContentView(layout)
-        updateSignedInState()
+        updateState()
     }
 
-    override fun onDestroy() { pollingJob?.cancel(); super.onDestroy() }
-
-    private fun startLogin() {
-        pollingJob?.cancel()
-        startButton.isEnabled = false
-        status.text = "Получаю код…"
-        pollingJob = lifecycleScope.launch {
-            runCatching { YoutubeOAuthManager.requestDeviceAuthorization() }
-                .onSuccess { authorization ->
-                    code.text = authorization.userCode
-                    verificationUrl = authorization.verificationUrl
-                    openButton.isEnabled = true
-                    status.text = "Войдите в Google и введите этот код."
-                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(verificationUrl))) }
-                    when (val result = YoutubeOAuthManager.waitForAuthorization(authorization)) {
-                        is YoutubeOAuthManager.PollResult.Success -> {
-                            status.text = "Вход выполнен. Вернитесь к видео и повторите запуск."
-                            code.text = ""
-                            openButton.isEnabled = false
-                            startButton.isEnabled = true
-                            signOutButton.isEnabled = true
-                        }
-                        is YoutubeOAuthManager.PollResult.Failure -> { status.text = result.message; startButton.isEnabled = true }
-                        YoutubeOAuthManager.PollResult.Pending -> Unit
-                    }
+    private fun authorize() {
+        loginButton.isEnabled = false
+        status.text = "Открываю системный вход Google…"
+        Identity.getAuthorizationClient(this)
+            .authorize(YoutubeOAuthManager.authorizationRequest())
+            .addOnSuccessListener { result ->
+                val pendingIntent = result.pendingIntent
+                if (result.hasResolution() && pendingIntent != null) {
+                    authorizationLauncher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
+                } else if (YoutubeOAuthManager.accept(result) != null) {
+                    showAuthorized()
+                } else {
+                    showFailure("Google не вернул токен YouTube.")
                 }
-                .onFailure { status.text = "Не удалось начать вход: ${it.message.orEmpty()}"; startButton.isEnabled = true }
+            }
+            .addOnFailureListener {
+                showFailure("Не удалось открыть вход Google: ${it.message.orEmpty()}")
+            }
+    }
+
+    private fun revokeAccess() {
+        loginButton.isEnabled = false
+        signOutButton.isEnabled = false
+        status.text = "Отключаю аккаунт…"
+        val request = RevokeAccessRequest.builder()
+            .setScopes(YoutubeOAuthManager.requestedScopes)
+            .build()
+        Identity.getAuthorizationClient(this).revokeAccess(request).addOnCompleteListener {
+            YoutubeOAuthManager.markAuthorized(false)
+            updateState()
         }
     }
 
-    private fun updateSignedInState() {
-        val signedIn = YoutubeOAuthManager.isSignedIn()
-        status.text = if (signedIn) "Аккаунт подключён." else "Аккаунт не подключён."
-        signOutButton.isEnabled = signedIn
-        startButton.isEnabled = true
-        code.text = ""
-        openButton.isEnabled = false
+    private fun showAuthorized() {
+        status.text = "YouTube-аккаунт подключён. Токен будет обновляться через Google Play services."
+        loginButton.isEnabled = true
+        signOutButton.isEnabled = true
     }
 
-    private fun matchWrap() = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    private fun showFailure(message: String) {
+        status.text = message
+        loginButton.isEnabled = true
+        signOutButton.isEnabled = YoutubeOAuthManager.isSignedIn()
+    }
+
+    private fun updateState() {
+        val authorized = YoutubeOAuthManager.isSignedIn()
+        status.text = if (authorized) "YouTube-аккаунт подключён." else "YouTube-аккаунт не подключён."
+        loginButton.isEnabled = true
+        signOutButton.isEnabled = authorized
+    }
+
+    private fun matchWrap() = ViewGroup.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+    )
 }
