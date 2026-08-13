@@ -547,7 +547,7 @@ jobs:
 
           aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           "$aapt" dump badging "$apk" | tee /tmp/badging.txt
-          grep -q "package: name='app.weqextube' versionCode='14' versionName='1.0.14'" /tmp/badging.txt
+          grep -q "package: name='app.weqextube' versionCode='15' versionName='1.0.14'" /tmp/badging.txt
           grep -q "application-label:'WeqexTube'" /tmp/badging.txt
 
           "$aapt" dump resources "$apk" > /tmp/resources.txt
