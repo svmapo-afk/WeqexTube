@@ -25,7 +25,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y imagemagick apksigner
 
-      - name: Apply WeqexTube 1.0.12 Google OAuth and extractor fix
+      - name: Apply WeqexTube 1.0.13 native Android authorization
         working-directory: source
         run: |
           sed -i 's/applicationId = "com.github.libretube"/applicationId = "app.weqextube"/' app/build.gradle.kts
@@ -33,8 +33,8 @@ jobs:
           sed -i 's/resValue("string", "app_name", "LibreTube")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/rootProject.name = "LibreTube"/rootProject.name = "WeqexTube"/' settings.gradle.kts
-          sed -Ei 's/versionCode = [0-9]+/versionCode = 13/' app/build.gradle.kts
-          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.12"/' app/build.gradle.kts
+          sed -Ei 's/versionCode = [0-9]+/versionCode = 14/' app/build.gradle.kts
+          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.13"/' app/build.gradle.kts
 
           python3 - <<'PY'
           from pathlib import Path
@@ -379,6 +379,20 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          gradle = Path("app/build.gradle.kts")
+          text = gradle.read_text()
+          dependency = '    implementation("com.google.android.gms:play-services-auth:21.6.0")\n'
+          marker = "dependencies {\n"
+          if dependency not in text:
+              if marker not in text:
+                  raise SystemExit("Gradle dependencies block missing")
+              text = text.replace(marker, marker + dependency, 1)
+          gradle.write_text(text)
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+
           app = Path("app/src/main/java/com/github/libretube/LibreTubeApp.kt")
           text = app.read_text()
           text = text.replace(
@@ -490,8 +504,8 @@ jobs:
         working-directory: source
         run: |
           grep -q 'applicationId = "app.weqextube"' app/build.gradle.kts
-          grep -q 'versionCode = 13' app/build.gradle.kts
-          grep -q 'versionName = "1.0.12"' app/build.gradle.kts
+          grep -q 'versionCode = 14' app/build.gradle.kts
+          grep -q 'versionName = "1.0.13"' app/build.gradle.kts
           grep -q '<string name="app_name" translatable="false">WeqexTube</string>' app/src/main/res/values/strings.xml
           grep -q '<string name="about">О WeqexTube</string>' app/src/main/res/values-ru/strings.xml
           grep -q 'Добро пожаловать в WeqexTube' app/src/main/res/values-ru/strings.xml
@@ -508,7 +522,7 @@ jobs:
           grep -q 'visionos player response' app/src/main/java/com/github/libretube/api/ResilientMediaServiceRepository.kt
           grep -q 'progressiveStream != null' app/src/main/java/com/github/libretube/services/OnlinePlayerService.kt
           grep -q 'progressiveStream.url!!.toUri()' app/src/main/java/com/github/libretube/services/OnlinePlayerService.kt
-          grep -q '208620062506-p8huru5oe2lrcn8a72v25dsu3i543aag.apps.googleusercontent.com' app/src/main/java/com/github/libretube/oauth/YoutubeOAuthManager.kt
+          grep -q '208620062506-km7bqj0p959kqdnu72hhiv1mupgnqgfc.apps.googleusercontent.com' app/src/main/java/com/github/libretube/oauth/YoutubeOAuthManager.kt
           grep -q 'YoutubeOAuthManager.authorizationHeader()' app/src/main/java/com/github/libretube/util/NewPipeDownloaderImpl.kt
           grep -q 'app:key="youtube_account"' app/src/main/res/xml/settings.xml
           grep -q 'YoutubeLoginActivity' app/src/main/AndroidManifest.xml
@@ -531,7 +545,7 @@ jobs:
 
           aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           "$aapt" dump badging "$apk" | tee /tmp/badging.txt
-          grep -q "package: name='app.weqextube' versionCode='13' versionName='1.0.12'" /tmp/badging.txt
+          grep -q "package: name='app.weqextube' versionCode='14' versionName='1.0.13'" /tmp/badging.txt
           grep -q "application-label:'WeqexTube'" /tmp/badging.txt
 
           "$aapt" dump resources "$apk" > /tmp/resources.txt
@@ -549,10 +563,12 @@ jobs:
           sha256sum "$apk"
 
       - name: Prepare direct APK
-        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.12.apk
+        if: ${{ false }}
+        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.13.apk
 
       - name: Publish verified direct APK
+        if: ${{ false }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.0.12 WeqexTube-1.0.12.apk --title "WeqexTube 1.0.12" --notes "Добавлен настоящий вход в YouTube через официальный Google OAuth-код устройства. Токен хранится зашифрованным и добавляется к запросам YouTube; резервный Piped-поток сохранён. Это экспериментальное исправление блокировки player response: результат зависит от аккаунта, IP/VPN и изменений YouTube."
+          gh release create v1.0.13 WeqexTube-1.0.13.apk --title "WeqexTube 1.0.13" --notes "Добавлена системная Android-авторизация Google без client_secret. Токен YouTube обновляется через Google Play services; сохранены резервные механизмы воспроизведения."
