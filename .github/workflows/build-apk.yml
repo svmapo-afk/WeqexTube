@@ -562,6 +562,13 @@ jobs:
           apksigner verify "$apk"
           sha256sum "$apk"
 
+      - name: Upload compiled APK for local release signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeqexTube-1.0.13-compiled
+          path: source/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
       - name: Prepare direct APK
         if: ${{ false }}
         run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.13.apk
