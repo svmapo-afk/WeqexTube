@@ -23,7 +23,7 @@ jobs:
       - name: Install build inspection tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y imagemagick apksigner
+          sudo apt-get install -y imagemagick apksigner zipalign
 
       - name: Apply WeqexTube 1.0.13 native Android authorization
         working-directory: source
@@ -562,11 +562,18 @@ jobs:
           apksigner verify "$apk"
           sha256sum "$apk"
 
+      - name: Collect compiled APK and Android signing tools
+        run: |
+          mkdir -p local-release
+          cp source/app/build/outputs/apk/debug/app-debug.apk local-release/WeqexTube-1.0.13-compiled.apk
+          cp /usr/share/java/apksigner.jar local-release/apksigner.jar
+          cp "$(command -v zipalign)" local-release/zipalign
+
       - name: Upload compiled APK for local release signing
         uses: actions/upload-artifact@v4
         with:
           name: WeqexTube-1.0.13-compiled
-          path: source/app/build/outputs/apk/debug/app-debug.apk
+          path: local-release
           if-no-files-found: error
 
       - name: Prepare direct APK
