@@ -415,22 +415,21 @@ jobs:
 
           settings = Path("app/src/main/res/xml/settings.xml")
           text = settings.read_text()
-          marker = """    <Preference
-              android:icon="@drawable/ic_server"
-              app:key="instance"
-              app:summary="@string/instance_summary"
-              app:title="@string/instance" />
-          """
-          account = """    <Preference
+          instance_key = 'app:key="instance"'
+          key_position = text.find(instance_key)
+          if key_position < 0:
+              raise SystemExit("settings.xml instance preference missing")
+          preference_start = text.rfind("<Preference", 0, key_position)
+          if preference_start < 0:
+              raise SystemExit("settings.xml preference start missing")
+          account = """<Preference
               android:icon="@drawable/ic_login_filled"
               app:key="youtube_account"
               app:summary="Вход Google для запросов воспроизведения"
               app:title="YouTube-аккаунт" />
 
           """
-          if marker not in text:
-              raise SystemExit("settings.xml structure changed upstream")
-          settings.write_text(text.replace(marker, account + marker, 1))
+          settings.write_text(text[:preference_start] + account + text[preference_start:])
 
           main_settings = Path("app/src/main/java/com/github/libretube/ui/preferences/MainSettings.kt")
           text = main_settings.read_text()
