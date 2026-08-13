@@ -25,7 +25,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y imagemagick apksigner zipalign
 
-      - name: Apply WeqexTube 1.0.14 native Android authorization
+      - name: Apply WeqexTube 1.0.15 native Android authorization
         working-directory: source
         run: |
           sed -i 's/applicationId = "com.github.libretube"/applicationId = "app.weqextube"/' app/build.gradle.kts
@@ -33,8 +33,8 @@ jobs:
           sed -i 's/resValue("string", "app_name", "LibreTube")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/resValue("string", "app_name", "LibreTube Debug")/resValue("string", "app_name", "WeqexTube")/' app/build.gradle.kts
           sed -i 's/rootProject.name = "LibreTube"/rootProject.name = "WeqexTube"/' settings.gradle.kts
-          sed -Ei 's/versionCode = [0-9]+/versionCode = 15/' app/build.gradle.kts
-          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.14"/' app/build.gradle.kts
+          sed -Ei 's/versionCode = [0-9]+/versionCode = 16/' app/build.gradle.kts
+          sed -Ei 's/versionName = "[^"]+"/versionName = "1.0.15"/' app/build.gradle.kts
 
           python3 - <<'PY'
           from pathlib import Path
@@ -211,6 +211,7 @@ jobs:
           resilient_source = textwrap.dedent("""
           package com.github.libretube.api
 
+          import com.github.libretube.api.obj.StreamItem
           import com.github.libretube.api.obj.Streams
           import kotlinx.coroutines.CancellationException
           import kotlinx.coroutines.TimeoutCancellationException
@@ -221,6 +222,49 @@ jobs:
               private val primary: MediaServiceRepository,
               private val fallbackOnAnyError: Boolean = false,
           ) : MediaServiceRepository by primary {
+              override suspend fun getTrending(
+                  region: String,
+                  category: TrendingCategory,
+              ): List<StreamItem> {
+                  val firstError = try {
+                      val result = primary.getTrending(region, category)
+                      if (result.isNotEmpty()) return result
+                      IllegalStateException("Selected server returned an empty trending feed")
+                  } catch (error: CancellationException) {
+                      throw error
+                  } catch (error: Exception) {
+                      error
+                  }
+
+                  val endpoints = listOf(
+                      PipedMediaServiceRepository.apiUrl,
+                      "https://pipedapi.adminforge.de",
+                      "https://pipedapi.kavin.rocks",
+                      "https://pipedapi.leptons.xyz",
+                      "https://pipedapi.nosebs.ru",
+                      "https://api.piped.private.coffee",
+                      "https://pipedapi.orangenet.cc",
+                  ).distinct()
+
+                  for (endpoint in endpoints) {
+                      try {
+                          val result = withTimeout(12_000) {
+                              RetrofitInstance.buildRetrofitInstance<PipedApi>(endpoint)
+                                  .getTrending(region)
+                          }
+                          if (result.isNotEmpty()) return result
+                      } catch (error: TimeoutCancellationException) {
+                          firstError.addSuppressed(error)
+                      } catch (error: CancellationException) {
+                          throw error
+                      } catch (error: Exception) {
+                          firstError.addSuppressed(error)
+                      }
+                  }
+
+                  throw firstError
+              }
+
               override suspend fun getStreams(videoId: String): Streams {
                   val firstError = try {
                       return primary.getStreams(videoId)
@@ -235,9 +279,13 @@ jobs:
                   }
 
                   val endpoints = listOf(
+                      PipedMediaServiceRepository.apiUrl,
+                      "https://pipedapi.adminforge.de",
+                      "https://pipedapi.kavin.rocks",
+                      "https://pipedapi.leptons.xyz",
+                      "https://pipedapi.nosebs.ru",
                       "https://api.piped.private.coffee",
                       "https://pipedapi.orangenet.cc",
-                      PipedMediaServiceRepository.apiUrl,
                   ).distinct()
 
                   for (endpoint in endpoints) {
@@ -413,20 +461,13 @@ jobs:
               "package com.github.libretube.util\n",
               "package com.github.libretube.util\n\nimport com.github.libretube.oauth.YoutubeOAuthManager\n",
           )
+          # Keep OAuth tokens out of NewPipeExtractor traffic. The token is for
+          # official Google APIs; attaching it to web/Innertube extraction
+          # requests breaks visitorData negotiation on some accounts and VPNs.
           marker = "        val response = client.newCall(requestBuilder.build()).execute()"
-          authenticated = """        if (
-              url.contains("youtube.com") ||
-              url.contains("youtubei.googleapis.com")
-          ) {
-              YoutubeOAuthManager.authorizationHeader()?.let { authorization ->
-                  requestBuilder.header("Authorization", authorization)
-                  requestBuilder.header("X-Goog-AuthUser", "0")
-              }
-          }
-          val response = client.newCall(requestBuilder.build()).execute()"""
           if marker not in text:
               raise SystemExit("NewPipeDownloaderImpl structure changed upstream")
-          downloader.write_text(text.replace(marker, authenticated, 1))
+          downloader.write_text(text)
 
           settings = Path("app/src/main/res/xml/settings.xml")
           text = settings.read_text()
@@ -505,8 +546,8 @@ jobs:
         working-directory: source
         run: |
           grep -q 'applicationId = "app.weqextube"' app/build.gradle.kts
-          grep -q 'versionCode = 15' app/build.gradle.kts
-          grep -q 'versionName = "1.0.14"' app/build.gradle.kts
+          grep -q 'versionCode = 16' app/build.gradle.kts
+          grep -q 'versionName = "1.0.15"' app/build.gradle.kts
           grep -q '<string name="app_name" translatable="false">WeqexTube</string>' app/src/main/res/values/strings.xml
           grep -q '<string name="about">О WeqexTube</string>' app/src/main/res/values-ru/strings.xml
           grep -q 'Добро пожаловать в WeqexTube' app/src/main/res/values-ru/strings.xml
@@ -525,7 +566,11 @@ jobs:
           grep -q 'progressiveStream != null' app/src/main/java/com/github/libretube/services/OnlinePlayerService.kt
           grep -q 'progressiveStream.url!!.toUri()' app/src/main/java/com/github/libretube/services/OnlinePlayerService.kt
           grep -q '208620062506-km7bqj0p959kqdnu72hhiv1mupgnqgfc.apps.googleusercontent.com' app/src/main/java/com/github/libretube/oauth/YoutubeOAuthManager.kt
-          grep -q 'YoutubeOAuthManager.authorizationHeader()' app/src/main/java/com/github/libretube/util/NewPipeDownloaderImpl.kt
+          if grep -q 'YoutubeOAuthManager.authorizationHeader()' app/src/main/java/com/github/libretube/util/NewPipeDownloaderImpl.kt; then
+            exit 1
+          fi
+          grep -q 'override suspend fun getTrending' app/src/main/java/com/github/libretube/api/ResilientMediaServiceRepository.kt
+          grep -q 'pipedapi.adminforge.de' app/src/main/java/com/github/libretube/api/ResilientMediaServiceRepository.kt
           grep -q 'app:key="youtube_account"' app/src/main/res/xml/settings.xml
           grep -q 'YoutubeLoginActivity' app/src/main/AndroidManifest.xml
           test ! -d app/src/debug/res
@@ -547,7 +592,7 @@ jobs:
 
           aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           "$aapt" dump badging "$apk" | tee /tmp/badging.txt
-          grep -q "package: name='app.weqextube' versionCode='15' versionName='1.0.14'" /tmp/badging.txt
+          grep -q "package: name='app.weqextube' versionCode='16' versionName='1.0.15'" /tmp/badging.txt
           grep -q "application-label:'WeqexTube'" /tmp/badging.txt
 
           "$aapt" dump resources "$apk" > /tmp/resources.txt
@@ -567,24 +612,24 @@ jobs:
       - name: Collect compiled APK and Android signing tools
         run: |
           mkdir -p local-release
-          cp source/app/build/outputs/apk/debug/app-debug.apk local-release/WeqexTube-1.0.14-compiled.apk
+          cp source/app/build/outputs/apk/debug/app-debug.apk local-release/WeqexTube-1.0.15-compiled.apk
           cp /usr/share/java/apksigner.jar local-release/apksigner.jar
           cp "$(command -v zipalign)" local-release/zipalign
 
       - name: Upload compiled APK for local release signing
         uses: actions/upload-artifact@v4
         with:
-          name: WeqexTube-1.0.14-compiled
+          name: WeqexTube-1.0.15-compiled
           path: local-release
           if-no-files-found: error
 
       - name: Prepare direct APK
         if: ${{ false }}
-        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.14.apk
+        run: cp source/app/build/outputs/apk/debug/app-debug.apk WeqexTube-1.0.15.apk
 
       - name: Publish verified direct APK
         if: ${{ false }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.0.14 WeqexTube-1.0.14.apk --title "WeqexTube 1.0.14" --notes "Добавлена системная Android-авторизация Google без client_secret. Токен YouTube обновляется через Google Play services; сохранены резервные механизмы воспроизведения."
+          gh release create v1.0.15 WeqexTube-1.0.15.apk --title "WeqexTube 1.0.15" --notes "Добавлена системная Android-авторизация Google без client_secret. Токен YouTube обновляется через Google Play services; сохранены резервные механизмы воспроизведения."
