@@ -40,15 +40,31 @@ def command(*args):
 
 
 def panel_config():
-    output = command("x-ui", "settings")
-    port = re.search(r"^port:\s*(\d+)\s*$", output, re.M)
-    path = re.search(r"^webBasePath:\s*(\S+)\s*$", output, re.M)
-    if not (port and path):
-        abort("Не удалось определить порт и Web Base Path через 'x-ui settings'.")
-    basepath = path.group(1)
-    if not (basepath.startswith("/") and basepath.endswith("/")):
-        abort("Некорректный Web Base Path панели.")
-    return int(port.group(1)), basepath
+    # 3x-ui v3 SQLite persists these under settings(key,value). Read, never modify.
+    if DB.is_file():
+        with sqlite3.connect(f"file:{DB}?mode=ro", uri=True) as conn:
+            values = dict(conn.execute(
+                "SELECT key, value FROM settings WHERE key IN ('webPort', 'webBasePath')"
+            ).fetchall())
+        try:
+            port = int(values.get("webPort", "0"))
+        except (TypeError, ValueError):
+            port = 0
+        basepath = values.get("webBasePath", "")
+        if 1 <= port <= 65535 and basepath.startswith("/") and basepath.endswith("/"):
+            return port, basepath
+
+    # Fallback: CLI output may go to either stdout or stderr.
+    attempts = (("x-ui", "settings"),
+                ("/usr/local/x-ui/x-ui", "setting", "-show", "true"))
+    for args in attempts:
+        p = subprocess.run(args, capture_output=True, text=True, check=False)
+        output = p.stdout + "\n" + p.stderr
+        port_match = re.search(r"(?m)^port:\s*(\d+)\s*$", output)
+        path_match = re.search(r"(?m)^webBasePath:\s*(/[^\s]+)\s*$", output)
+        if port_match and path_match:
+            return int(port_match.group(1)), path_match.group(1)
+    abort("Не удалось прочитать webPort/webBasePath из SQLite и настроек CLI.")
 
 
 def backup_database():
