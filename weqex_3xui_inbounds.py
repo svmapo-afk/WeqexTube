@@ -97,7 +97,7 @@ class PanelAPI:
         headers = {"Accept": "application/json", "User-Agent": "weqex-local-setup/1.0"}
         data = None
         if fields is not None:
-            if route == "panel/api/inbounds/add":
+            if route in ("login", "panel/api/inbounds/add"):
                 data = json.dumps(fields, separators=(",", ":")).encode("utf-8")
                 headers["Content-Type"] = "application/json"
             else:
