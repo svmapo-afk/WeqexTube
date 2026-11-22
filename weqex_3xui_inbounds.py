@@ -89,11 +89,17 @@ def backup_database():
 def generate_reality_pair():
     if not os.path.isfile(XRAY):
         abort(f"Не найден исполняемый файл Xray: {XRAY}")
-    output = command(XRAY, "x25519")
-    private = re.search(r"(?im)^\s*(?:PrivateKey|Private key)\s*:\s*(\S+)", output)
-    public = re.search(r"(?im)^\s*(?:Password|PublicKey|Public key)\s*:\s*(\S+)", output)
+    # Xray v26 prints "Password (PublicKey):"; older versions print
+    # "Password:", "PublicKey:", or "Public key:".
+    run = subprocess.run([XRAY, "x25519"], capture_output=True, text=True, check=True)
+    output = run.stdout + "\n" + run.stderr
+    private = re.search(r"(?im)^\s*(?:PrivateKey|Private\s*key)\s*:\s*([A-Za-z0-9_-]{43,44})\s*$", output)
+    public = re.search(r"(?im)^\s*(?:Password(?:\s*\(PublicKey\))?|PublicKey|Public\s*key)\s*:\s*([A-Za-z0-9_-]{43,44})\s*$", output)
     if not (private and public):
-        abort("Не удалось распознать ключи из 'xray x25519' (ключи не выводились).")
+        # Never print generated key material in errors or logs.
+        labels = re.findall(r"(?m)^\s*([^:\n]+):", output)
+        abort("Не удалось прочитать X25519-ключи, метки вывода: " +
+              ", ".join(label.strip() for label in labels[:6]))
     return private.group(1), public.group(1)
 
 
